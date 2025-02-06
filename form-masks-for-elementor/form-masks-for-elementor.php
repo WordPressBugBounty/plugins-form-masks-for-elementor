@@ -1,11 +1,11 @@
 <?php
 /**
- * Plugin Name: Form Masks for Elementor
- * Plugin URI: https://eduardovillao.me/
- * Description: Form Masks for Elementor create a custom control in field advanced tab for your customize your fields with masks. This plugin require the Elementor Pro (Form Widget).
- * Author: EduardoVillao.me
- * Author URI: https://eduardovillao.me/
- * Version: 2.3
+ * Plugin Name: Form Input Masks for Elementor Form
+ * Plugin URI: https://coolplugins.net/
+ * Description: Form Input Masks for Elementor Form creates a custom control in the field advanced tab for customizing your fields with masks. This plugin requires Elementor Pro (Form Widget).
+ * Author: Cool Plugins
+ * Author URI: https://coolplugins.net/
+ * Version: 2.4.0
  * Requires at least: 5.5
  * Requires PHP: 7.4
  * Text Domain: form-masks-for-elementor
@@ -14,77 +14,178 @@
  * Requires Plugins: elementor
  */
 
-/*
-Form Masks for Elementor is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 2 of the License, or
-any later version.
-
-Form Masks for Elementor is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with Form Masks for Elementor. If not, see http://www.gnu.org/licenses/gpl-2.0.txt.
-*/
-
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
+ if ( ! defined( 'ABSPATH' ) ) {
+	header( 'Status: 403 Forbidden' );
+	header( 'HTTP/1.1 403 Forbidden' );
+	exit();
 }
 
-define( 'FME_PLUGIN_PATH', plugin_dir_path( __FILE__ ) );
-define( 'FME_PLUGN_URL', plugin_dir_url( __FILE__ ) );
-define( 'FME_VERSION', '2.3' );
+define( 'FME_VERSION', '2.4.0' );
 define( 'FME_PHP_MINIMUM_VERSION', '7.4' );
 define( 'FME_WP_MINIMUM_VERSION', '5.5' );
+define( 'FME_PLUGIN_PATH', plugin_dir_path( __FILE__ ) );
+define( 'FME_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-/**
- * Check PHP and WP version before include plugin class
- *
- * @since 1.6
- */
-if ( ! version_compare( PHP_VERSION, FME_PHP_MINIMUM_VERSION, '>=' ) ) {
-	add_action( 'admin_notices', 'fme_admin_notice_php_version_fail' );
+register_activation_hook( __FILE__, array( 'Form_Masks_For_Elementor', 'fme_activate' ) );
+register_deactivation_hook( __FILE__, array( 'Form_Masks_For_Elementor', 'fme_deactivate' ) );
 
-} elseif ( ! version_compare( get_bloginfo( 'version' ), FME_WP_MINIMUM_VERSION, '>=' ) ) {
-	add_action( 'admin_notices', 'fme_admin_notice_wp_version_fail' );
-
-} else {
-	include_once FME_PLUGIN_PATH . 'includes/class-fme-plugin.php';
-	FME\Includes\FME_Plugin::instance();
+if ( ! function_exists( 'is_plugin_active' ) ) {
+    include_once ABSPATH . 'wp-admin/includes/plugin.php';
 }
 
-/**
- * Admin notice PHP version fail
- *
- * @since 1.6
- * @return void
- */
-function fme_admin_notice_php_version_fail() {
-	$message = sprintf(
-		esc_html__( '%1$s requires PHP version %2$s or greater.', 'form-masks-for-elementor' ),
-		'<strong>Form masks for Elementor</strong>',
-		FME_PHP_MINIMUM_VERSION
-	);
+class Form_Masks_For_Elementor {
+    /**
+     * Plugin instance.
+     */
+    private static $instance = null;
 
-	$html_message = sprintf( '<div class="notice notice-error"><p>%1$s</p></div>', $message );
-	echo wp_kses_post( $html_message );
+    /**
+     * Constructor.
+     */
+    private function __construct() {
+        if ( $this->check_requirements() ) {
+            $this->initialize_plugin();
+            add_action( 'init', array( $this, 'text_domain_path_set' ) );
+			add_action( 'activated_plugin', array( $this, 'fme_plugin_redirection' ) );
+			add_filter( 'plugin_action_links_' . plugin_basename( __FILE__ ), array( $this, 'fme_pro_plugin_demo_link' ) );
+        }
+    }
+
+    /**
+     * Singleton instance.
+     *
+     * @return self
+     */
+    public static function instance() {
+        if ( null === self::$instance ) {
+            self::$instance = new self();
+        }
+
+        return self::$instance;
+    }
+
+	public function fme_plugin_redirection($plugin){
+		if ( ! is_plugin_active( 'elementor-pro/elementor-pro.php' )) {
+			return false;
+		}
+
+		if ( is_plugin_active( 'cool-formkit-for-elementor-forms/cool-formkit-for-elementor-forms.php' ) ) {
+			return false;
+		}
+
+		if ( $plugin == plugin_basename( __FILE__ ) ) {
+			exit( wp_redirect( admin_url( 'admin.php?page=cool-formkit' ) ) );
+		}	
+	}
+
+    public function text_domain_path_set(){
+        load_plugin_textdomain( 'form-masks-for-elementor', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
+    }
+
+	public function fme_pro_plugin_demo_link($link){
+		$settings_link = '<a href="' . admin_url( 'admin.php?page=cool-formkit' ) . '">Cool FormKit</a>';
+		array_unshift( $link, $settings_link );
+		return $link;
+	}
+
+    /**
+     * Check requirements for PHP and WordPress versions.
+     *
+     * @return bool
+     */
+    private function check_requirements() {
+        if ( ! version_compare( PHP_VERSION, FME_PHP_MINIMUM_VERSION, '>=' ) ) {
+            add_action( 'admin_notices', [ $this, 'admin_notice_php_version_fail' ] );
+            return false;
+        }
+
+        if ( ! version_compare( get_bloginfo( 'version' ), FME_WP_MINIMUM_VERSION, '>=' ) ) {
+            add_action( 'admin_notices', [ $this, 'admin_notice_wp_version_fail' ] );
+            return false;
+        }
+
+		if ( is_plugin_active( 'cool-formkit-for-elementor-forms/cool-formkit-for-elementor-forms.php' ) ) {
+			return false;
+		}
+
+		if ( ! is_plugin_active( 'elementor-pro/elementor-pro.php' ) ) {
+			add_action('admin_notices', array($this, 'admin_notice_missing_main_plugin'));
+			return false;
+		}
+
+        return true;
+    }
+
+	/**
+	 * Show notice to enable elementor pro
+	 */
+	public function admin_notice_missing_main_plugin() {
+		$message = sprintf(
+			// translators: %1$s replace with Conditional Fields for Elementor Form & %2$s replace with Elementor Pro.
+			esc_html__(
+				'%1$s requires %2$s to be installed and activated.',
+				'form-masks-for-elementor'
+			),
+			esc_html__( 'Form Input Masks for Elementor Form', 'form-masks-for-elementor' ),
+			esc_html__( 'Elementor Pro', 'form-masks-for-elementor' ),
+			); 
+			printf( '<div class="notice notice-warning is-dismissible"><p>%1$s</p></div>', esc_html( $message ) );
+			deactivate_plugins( plugin_basename( __FILE__ ) );
+		}
+    /**
+     * Initialize the plugin.
+     */
+    private function initialize_plugin() {
+        require_once FME_PLUGIN_PATH . 'includes/class-fme-plugin.php';
+        FME\Includes\FME_Plugin::instance();
+
+        if(!is_plugin_active( 'extensions-for-elementor-form/extensions-for-elementor-form.php' )){
+            require_once FME_PLUGIN_PATH . '/includes/class-fme-elementor-page.php';
+            new FME_Elementor_Page();
+        }
+
+		if ( is_admin() ) {
+			require_once FME_PLUGIN_PATH . 'admin/feedback/admin-feedback-form.php';
+		}
+    }
+
+    /**
+     * Admin notice for PHP version failure.
+     */
+    public function admin_notice_php_version_fail() {
+        $message = sprintf(
+            esc_html__( '%1$s requires PHP version %2$s or greater.', 'form-masks-for-elementor' ),
+            '<strong>Form Input Masks for Elementor Form</strong>',
+            FME_PHP_MINIMUM_VERSION
+        );
+
+        $html_message = sprintf( '<div class="notice notice-error"><p>%1$s</p></div>', $message );
+        echo wp_kses_post( $html_message );
+    }
+
+    /**
+     * Admin notice for WordPress version failure.
+     */
+    public function admin_notice_wp_version_fail() {
+        $message = sprintf(
+            esc_html__( '%1$s requires WordPress version %2$s or greater.', 'form-masks-for-elementor' ),
+            '<strong>Form Input Masks for Elementor Form</strong>',
+            FME_WP_MINIMUM_VERSION
+        );
+
+        $html_message = sprintf( '<div class="notice notice-error"><p>%1$s</p></div>', $message );
+        echo wp_kses_post( $html_message );
+    }
+
+	public static function fme_activate(){
+		update_option( 'fme-v', FME_VERSION );
+		update_option( 'fme-type', 'FREE' );
+		update_option( 'fme-installDate', gmdate( 'Y-m-d h:i:s' ) );
+	}
+
+	public static function fme_deactivate(){
+	}
 }
 
-/**
- * Admin notice WP version fail
- *
- * @since 1.6
- * @return void
- */
-function fme_admin_notice_wp_version_fail() {
-	$message = sprintf(
-		esc_html__( '%1$s requires WordPress version %2$s or greater.', 'form-masks-for-elementor' ),
-		'<strong>Form masks for Elementor</strong>',
-		FME_WP_MINIMUM_VERSION
-	);
-
-	$html_message = sprintf( '<div class="notice notice-error"><p>%1$s</p></div>', $message );
-	echo wp_kses_post( $html_message );
-}
+// Initialize the plugin.
+Form_Masks_For_Elementor::instance();

@@ -44,30 +44,7 @@ final class FME_Plugin {
 		}
 		return self::$_instance;
 	}
-
-	/**
-	 * Disable class cloning and throw an error on object clone.
-	 *
-	 * The whole idea of the singleton design pattern is that there is a single
-	 * object. Therefore, we don't want the object to be cloned.
-	 *
-	 * @access public
-	 * @since 1.6
-	 */
-	public function __clone() {
-		_doing_it_wrong( __FUNCTION__, esc_html__( 'Something went wrong.', 'form-masks-for-elementor' ), '1.6' );
-	}
-
-	/**
-	 * Disable unserializing of the class.
-	 *
-	 * @access public
-	 * @since 1.6
-	 */
-	public function __wakeup() {
-		_doing_it_wrong( __FUNCTION__, esc_html__( 'Something went wrong.', 'form-masks-for-elementor' ), '1.6' );
-	}
-
+	
 	/**
 	 * Constructor
 	 *
@@ -78,9 +55,58 @@ final class FME_Plugin {
 	 * @access private
 	 */
 	private function __construct() {
-		\add_action( 'init', array( $this, 'init' ), -10 );
+		add_action('wp_enqueue_scripts', array($this,'my_enqueue_scripts'));
+		add_action( 'elementor/frontend/after_enqueue_scripts', array( $this, 'frontend_assets' ) ,999);
+		add_action( 'elementor/preview/init', array( $this, 'editor_inline_JS'));
+		add_action( 'init', array( $this, 'init' ), -10 );
+		add_action( 'wp_ajax_fme_elementor_review_notice', array( $this, 'fme_elementor_review_notice' ) );
+
 	}
 
+	public function my_enqueue_scripts(){
+		wp_register_script( 'fme-custom-mask-script', FME_PLUGIN_URL . 'assets/js/custom-mask-script.js', array('jquery'), FME_VERSION, true );
+
+		wp_register_style( 'fme-frontend-css', FME_PLUGIN_URL . 'assets/css/mask-frontend.css', FME_VERSION, true );
+
+		wp_register_script( 'fme-new-input-mask', FME_PLUGIN_URL . 'assets/js/new-input-mask.js', array('elementor-frontend','jquery'), FME_VERSION, true );
+	}
+
+	public function frontend_assets(){	
+		$error_messages = [
+			'mask-cnpj'   => __("Invalid CNPJ.", "form-masks-for-elementor"),
+			'mask-cpf'    => __("Invalid CPF.", "form-masks-for-elementor"),
+			'mask-cep'    => __("Invalid CEP (XXXXX-XXX).", "form-masks-for-elementor"),
+			'mask-phus'   => __("Invalid number: (123) 456-7890", "form-masks-for-elementor"),
+			'mask-ph8'    => __("Invalid number: 1234-5678", "form-masks-for-elementor"),
+			'mask-ddd8'   => __("Invalid number: (DDD) 1234-5678", "form-masks-for-elementor"),
+			'mask-ddd9'   => __("Invalid number: (DDD) 91234-5678", "form-masks-for-elementor"),
+			'mask-dmy'    => __("Invalid date: dd/mm/yyyy", "form-masks-for-elementor"),
+			'mask-mdy'    => __("Invalid date: mm/dd/yyyy", "form-masks-for-elementor"),
+			'mask-hms'    => __("Invalid time: hh:mm:ss", "form-masks-for-elementor"),
+			'mask-hm'     => __("Invalid time: hh:mm", "form-masks-for-elementor"),
+			'mask-dmyhm'  => __("Invalid date: dd/mm/yyyy hh:mm", "form-masks-for-elementor"),
+			'mask-mdyhm'  => __("Invalid date: mm/dd/yyyy hh:mm", "form-masks-for-elementor"),
+			'mask-my'     => __("Invalid date: mm/yyyy", "form-masks-for-elementor"),
+			'mask-ccs'    => __("Invalid credit card number.", "form-masks-for-elementor"),
+			'mask-cch'    => __("Invalid credit card number.", "form-masks-for-elementor"),
+			'mask-ccmy'   => __("Invalid date.", "form-masks-for-elementor"),
+			'mask-ccmyy'  => __("Invalid date.", "form-masks-for-elementor"),
+			'mask-ipv4'   => __("Invalid IPv4 address.", "form-masks-for-elementor")
+		];
+
+		wp_enqueue_script( 'fme-custom-mask-script' );
+		wp_enqueue_script( 'fme-new-input-mask' );
+		wp_enqueue_style( 'fme-frontend-css' );
+
+		wp_localize_script( 'fme-custom-mask-script', 'fmeData', array(
+			'pluginUrl' => FME_PLUGIN_URL, 
+			'errorMessages' => $error_messages 
+		) );		
+	}
+
+	public function editor_inline_JS() {
+		wp_enqueue_script( 'fme-editor-template-js', FME_PLUGIN_URL . 'assets/js/mask-editor-template.js', array(), FME_VERSION, true );
+	}
 	/**
 	 * Initialize the plugin
 	 *
@@ -91,22 +117,11 @@ final class FME_Plugin {
 	 * @access public
 	 */
 	public function init() {
-		if ( ! did_action( 'elementor/loaded' ) ) {
-			return;
-		}
-
-		if ( ! $this->plugin_is_active( 'elementor-pro/elementor-pro.php' ) ) {
-			\add_action( 'admin_notices', array( $this, 'notice_elementor_pro_inactive' ) );
-			return;
-		}
-
-		\do_action( 'fme_init' );
-
 		require_once FME_PLUGIN_PATH . '/includes/class-elementor-mask-control.php';
 		new FME_Elementor_Forms_Mask();
 
-		\add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_plugin_js' ] );
-		\add_action( 'elementor/editor/after_enqueue_scripts', array( $this, 'register_editor_scripts') );
+		// add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_plugin_js' ] );
+		add_action( 'elementor/editor/before_enqueue_scripts', array( $this, 'register_editor_scripts') );
 	}
 
 	/**
@@ -119,15 +134,7 @@ final class FME_Plugin {
 	 * @access public
 	 */
 	public function enqueue_plugin_js() {
-		\wp_register_script( 'fme-input-mask', FME_PLUGN_URL . 'assets/js/input-mask.min.js', array(), FME_VERSION, true );
-		\wp_enqueue_script( 'fme-input-mask' );
-
-		/**
-		 * Action for enqueue more scripts or remove current scripts
-		 *
-		 * @since 1.5
-		 */
-		\do_action( 'fme_after_enqueue_scripts' );
+		do_action( 'fme_after_enqueue_scripts' );
 	}
 
 	/**
@@ -136,38 +143,22 @@ final class FME_Plugin {
 	 * @return void
 	 */
 	public function register_editor_scripts() {
-		wp_register_style( 'fme-input-mask-editor', FME_PLUGN_URL . 'assets/css/editor.min.css', array(), FME_VERSION );
+		wp_register_style( 'fme-input-mask-editor', FME_PLUGIN_URL . 'assets/css/mask-editor.css', array(), FME_VERSION );
 		wp_enqueue_style( 'fme-input-mask-editor' );
+
+		wp_register_script( 'fme-input-mask-editor', FME_PLUGIN_URL . 'assets/js/mask-editor.js', array( 'jquery' ), FME_VERSION, true );
+		wp_enqueue_script( 'fme-input-mask-editor' );
 	}
 
-	/**
-	 * Admin notice - Elementor PRO
-	 *
-	 * Warning when the site doesn't have Elementor PRO activated.
-	 *
-	 * @since 1.4
-	 *
-	 * @access public
-	 */
-	public function notice_elementor_pro_inactive() {
-		$message = sprintf(
-			esc_html__( '%1$s requires %2$s to be installed and activated.', 'form-masks-for-elementor' ),
-			'<strong>Form Masks for Elementor</strong>',
-			'<strong>Elementor Pro</strong>'
-		);
+	public function fme_elementor_review_notice() {
+		if ( ! check_ajax_referer( 'cfef_elementor_review', 'nonce', false ) ) {
+			wp_send_json_error( __( 'Invalid security token sent.', 'cfef' ) );
+			wp_die( '0', 400 );
+		}
 
-		$html_message = sprintf( '<div class="notice notice-error"><p>%1$s</p></div>', $message );
-		echo wp_kses_post( $html_message );
-	}
-
-	/**
-	 * Check plugin is activated
-	 *
-	 * @since 1.5
-	 * @return boolean
-	 * @param string $plugin
-	 */
-	public function plugin_is_active( $plugin ) {
-		return function_exists( 'is_plugin_active' ) ? \is_plugin_active( $plugin ) : in_array( $plugin, (array) \get_option( 'active_plugins', array() ), true );
+		if ( isset( $_POST['cfef_notice_dismiss'] ) && 'true' === sanitize_text_field($_POST['cfef_notice_dismiss']) ) {
+			update_option( 'fme_elementor_notice_dismiss', 'yes' );
+		}
+		exit;
 	}
 }
